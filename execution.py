@@ -1,19 +1,19 @@
+# Contents of execution.py
+
 from MetaTrader5 import mt5
+import threading
 from trade_management import initialize_mt5, place_trade, close_trade, shutdown_mt5
 from strategy import strategy_decision
-import threading
 
 def monitor_symbol(symbol, timeframe):
     decision = strategy_decision(symbol, timeframe)
 
     if decision == 'buy':
         print(f"Strategy decision for {symbol}: BUY")
-        ticket = place_trade(symbol, 0.01, mt5.ORDER_TYPE_BUY, 100, 300, comment="Strategy buy order")
-        # Additional logic to manage the trade
+        # Example: place_trade(symbol, 0.01, mt5.ORDER_TYPE_BUY, 100, 300, "Strategy buy order")
     elif decision == 'sell':
         print(f"Strategy decision for {symbol}: SELL")
-        ticket = place_trade(symbol, 0.01, mt5.ORDER_TYPE_SELL, 100, 300, comment="Strategy sell order")
-        # Additional logic to manage the trade
+        # Example: place_trade(symbol, 0.01, mt5.ORDER_TYPE_SELL, 100, 300, "Strategy sell order")
     else:
         print(f"Strategy decision for {symbol}: HOLD")
 
