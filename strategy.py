@@ -1,6 +1,7 @@
 from MetaTrader5 import mt5
 import pandas as pd
 
+# Calculate MACD
 def calculate_macd(symbol, timeframe, fast_ema_period=12, slow_ema_period=26, signal_period=9):
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, slow_ema_period + 100)
     df = pd.DataFrame(rates)
@@ -10,6 +11,7 @@ def calculate_macd(symbol, timeframe, fast_ema_period=12, slow_ema_period=26, si
     df['signal'] = df['macd'].ewm(span=signal_period, adjust=False).mean()
     return df.iloc[-1]['macd'], df.iloc[-1]['signal']
 
+# Calculate RSI
 def calculate_rsi(symbol, timeframe, period=14):
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, period + 100)
     df = pd.DataFrame(rates)
@@ -20,6 +22,7 @@ def calculate_rsi(symbol, timeframe, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi.iloc[-1]
 
+# Calculate Fibonacci levels
 def fibonacci_levels(high, low):
     levels = {
         '23.6%': high - (high - low) * 0.236,
@@ -29,6 +32,14 @@ def fibonacci_levels(high, low):
     }
     return levels
 
+def calculate_obv(df):
+    df['daily_return'] = df['close'].diff()
+    df['direction'] = df['daily_return'].apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+    df['adjusted_volume'] = df['direction'] * df['real_volume']
+    df['obv'] = df['adjusted_volume'].cumsum()
+    return df['obv'].iloc[-1]
+
+# Calculate Ichimoku Cloud
 def ichimoku_cloud(df):
     df['tenkan_sen'] = (df['high'].rolling(window=9).max() + df['low'].rolling(window=9).min()) / 2
     df['kijun_sen'] = (df['high'].rolling(window=26).max() + df['low'].rolling(window=26).min()) / 2
@@ -37,12 +48,7 @@ def ichimoku_cloud(df):
     df['chikou_span'] = df['close'].shift(-26)
     return df
 
-def is_bullish_trend(candles):
-    return all(candles[i]['close'] > candles[i]['open'] for i in range(3))
-
-def is_bearish_trend(candles):
-    return all(candles[i]['close'] < candles[i]['open'] for i in range(3))
-
+# Strategy decision based on indicators and volume
 def strategy_decision(symbol, timeframe, pip_threshold=15):
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, 52 + 100)
     df = pd.DataFrame(rates)
@@ -50,10 +56,12 @@ def strategy_decision(symbol, timeframe, pip_threshold=15):
     macd, signal = calculate_macd(symbol, timeframe)
     rsi = calculate_rsi(symbol, timeframe)
     ichimoku_df = ichimoku_cloud(df)
+    obv = calculate_obv(df)  # Calculate OBV
 
     last_candle = df.iloc[-1]
     prev_candle = df.iloc[-2]
     pip_movement = abs(last_candle['close'] - prev_candle['close']) / 0.0001
+    volume_diff = abs(last_candle['real_volume'] - prev_candle['real_volume'])
 
     live_price = last_candle['close']
 
@@ -62,8 +70,6 @@ def strategy_decision(symbol, timeframe, pip_threshold=15):
     fib_levels = fibonacci_levels(high, low)
 
     strategies_passed = []
-    if is_bullish_trend(df.iloc[-3:].to_dict('records')):
-        strategies_passed.append('Bullish Trend')
     if macd > signal:
         strategies_passed.append('MACD > Signal')
     if rsi < 30:
@@ -72,11 +78,15 @@ def strategy_decision(symbol, timeframe, pip_threshold=15):
         strategies_passed.append('Above 61.8% Fibonacci')
     if ichimoku_df.iloc[-1]['tenkan_sen'] > ichimoku_df.iloc[-1]['kijun_sen']:
         strategies_passed.append('Tenkan-sen > Kijun-sen')
+    if volume_diff > 0:
+        strategies_passed.append('Volume Increase')
+    if obv > df['obv'].iloc[-2]:  # Check if OBV is increasing
+        strategies_passed.append('Increasing OBV')
 
     decision = 'hold'
     if strategies_passed and pip_movement >= pip_threshold:
-        decision = 'buy' if 'Bullish Trend' in strategies_passed else 'sell'
+        decision = 'buy' if 'MACD > Signal' in strategies_passed and 'Above 61.8% Fibonacci' in strategies_passed and 'Increasing OBV' in strategies_passed else 'sell'
 
-    print(f"Symbol: {symbol}, Live Price: {live_price}, Strategies Passed: {', '.join(strategies_passed) if strategies_passed else 'None'}, Pip Difference: {pip_movement:.2f}, Trade Decision: {decision.upper()}")
+    print(f"Symbol: {symbol}, Live Price: {live_price}, Strategies Passed: {', '.join(strategies_passed) if strategies_passed else 'None'}, Pip Difference: {pip_movement:.2f}, Volume Difference: {volume_diff}, OBV: {obv}, Trade Decision: {decision.upper()}")
 
     return decision
